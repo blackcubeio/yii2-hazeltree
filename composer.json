@@ -1,0 +1,50 @@
+{
+    "name": "blackcube/yii2-hazeltree",
+    "description": "PHP 8.3+ Hazel Tree for the Yii framework",
+    "keywords": ["yii2", "hazeltree", "nestedset"],
+    "type": "yii2-extension",
+    "license": "BSD-3-Clause",
+    "authors": [
+        {
+            "name": "Philippe Gaultier",
+            "email": "philippe@blackcube.io"
+        }
+    ],
+    "repositories": [
+        {
+            "type": "composer",
+            "url": "https://asset-packagist.org"
+        }
+    ],
+    "require": {
+        "php" : "~8.3",
+        "yiisoft/yii2": "~2.0"
+    },
+    "require-dev" : {
+        "php" : "~8.3",
+        "codeception/codeception": "^5.3",
+        "codeception/module-asserts": "^3.2"
+    },
+    "autoload": {
+        "psr-4": {
+            "blackcube\\hazeltree\\": "src"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "tests\\": "tests/",
+            "tests\\_generated\\": "tests/_support/_generated/",
+            "tests\\Helper\\": "tests/_support/Helper/"
+        }
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-devel": "1.x-dev"
+        }
+    },
+    "config": {
+        "allow-plugins": {
+            "yiisoft/yii2-composer": true
+        }
+    }
+}

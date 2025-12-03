@@ -24,6 +24,8 @@ Since tree structures involve far more reads than writes (navigation, menus, bre
 - No rebalancing needed on insert/move operations
 - Rational number boundaries using 2x2 matrix encoding
 - Path-based addressing with dot notation (e.g., "1.2.3")
+- Composite primary key support
+- Transaction-safe operations with automatic rollback on failure
 
 ## Installation
 
@@ -38,7 +40,7 @@ composer require blackcube/yii2-hazeltree
 Your model must:
 - Extend `ActiveRecord`
 - Implement `ItemInterface`
-- Attach `ItemBehavior`
+- Use `ItemTrait`
 - Have columns: `path`, `left`, `right`, `level`
 
 ```php
@@ -46,18 +48,13 @@ Your model must:
 
 namespace app\models;
 
-use blackcube\hazeltree\behaviors\ItemBehavior;
 use blackcube\hazeltree\interfaces\ItemInterface;
+use blackcube\hazeltree\traits\ItemTrait;
 use yii\db\ActiveRecord;
 
 class Category extends ActiveRecord implements ItemInterface
 {
-    public function behaviors()
-    {
-        return [
-            'hazeltree' => ItemBehavior::class,
-        ];
-    }
+    use ItemTrait;
 
     public static function tableName()
     {
@@ -66,7 +63,7 @@ class Category extends ActiveRecord implements ItemInterface
 
     public function rules()
     {
-        return array_merge(ItemBehavior::rules(), [
+        return array_merge(static::treeRules(), [
             // your own rules
         ]);
     }
@@ -79,20 +76,36 @@ Required columns for HazelTree:
 
 ```php
 $this->createTable('{{%categories}}', [
+    // Your own columns
+    'id' => $this->primaryKey(),
+    'name' => $this->string(255),
+    // ...
+
     // Required by HazelTree
     'path' => $this->string(255)->notNull()->unique(),
     'left' => $this->double()->notNull(),
     'right' => $this->double()->notNull(),
     'level' => $this->integer()->notNull(),
-
-    // Your own columns
-    'id' => $this->primaryKey(),
-    'name' => $this->string(255),
-    // ...
-]);
+], 'ENGINE=InnoDB'); // InnoDB required for transaction support
 
 $this->createIndex('idx-categories-left', '{{%categories}}', 'left');
 $this->createIndex('idx-categories-right', '{{%categories}}', 'right');
+```
+
+#### Composite primary keys
+
+HazelTree supports composite primary keys:
+
+```php
+class CompositeCategory extends ActiveRecord implements ItemInterface
+{
+    use ItemTrait;
+
+    public static function primaryKey()
+    {
+        return ['type_id', 'category_id'];
+    }
+}
 ```
 
 ### 3. Tree operations

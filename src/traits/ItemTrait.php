@@ -581,7 +581,23 @@ trait ItemTrait
     private function getItemAndSiblings(ItemInterface $item): ActiveQuery
     {
         $pk = static::primaryKey();
-        // Fetch IDs first to avoid SQLite subquery limitation
+
+        // For composite primary keys, we need to fetch full records
+        // and build the condition manually
+        if (count($pk) > 1) {
+            $treeItems = $item->getTree()->select($pk)->asArray()->all();
+            $siblingsTreeItems = $item->getNextSiblingsTrees()->select($pk)->asArray()->all();
+            $allItems = array_merge($treeItems, $siblingsTreeItems);
+
+            $conditions = ['or'];
+            foreach ($allItems as $pkValues) {
+                $conditions[] = $pkValues;
+            }
+
+            return static::find()->where($conditions);
+        }
+
+        // For single primary key, use the simpler approach
         $treeIds = $item->getTree()->select($pk)->column();
         $siblingsTreeIds = $item->getNextSiblingsTrees()->select($pk)->column();
         $allIds = array_merge($treeIds, $siblingsTreeIds);
@@ -596,8 +612,9 @@ trait ItemTrait
      */
     private function moveAndSaveItems(ActiveQuery $itemsToMove, MatrixHelper $moveMatrix): void
     {
-        /** @var ItemInterface $itemToMove */
-        foreach ($itemsToMove->each() as $itemToMove) {
+        /** @var ItemInterface[] $items */
+        $items = $itemsToMove->all();
+        foreach ($items as $itemToMove) {
             $childMatrix = $itemToMove->getNodeMatrix();
             $itemMoveMatrix = clone $moveMatrix;
             $itemMoveMatrix->multiply($childMatrix);

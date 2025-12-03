@@ -1,6 +1,6 @@
 <?php
 /**
- * ItemBehavior.php
+ * ItemTrait.php
  *
  * PHP Version 8.3+
  *
@@ -9,31 +9,31 @@
  * @link https://www.blackcube.io
  */
 
-namespace blackcube\hazeltree\behaviors;
+namespace blackcube\hazeltree\traits;
 
 use blackcube\hazeltree\exceptions\InvalidNodeConfigurationException;
 use blackcube\hazeltree\helpers\MatrixHelper;
 use blackcube\hazeltree\helpers\TreeHelper;
 use blackcube\hazeltree\interfaces\ItemInterface;
-use yii\base\Behavior;
-use yii\base\InvalidConfigException;
 use yii\db\ActiveQuery;
-use yii\db\ActiveRecord;
-use Yii;
 
 /**
- * HazelTree behavior for ActiveRecord models
+ * Trait implementing the HazelTree nested set algorithm
  *
- * This behavior implements the HazelTree nested set algorithm based on
- * Dan Hazel's research "Using rational numbers to key nested sets" (2008)
+ * This trait implements Dan Hazel's research "Using rational numbers to key nested sets" (2008)
  *
- * @property-read ActiveRecord&ItemInterface $owner
+ * Use this trait in any ActiveRecord model that implements ItemInterface.
+ *
+ * @property string $path
+ * @property float $left
+ * @property float $right
+ * @property int $level
  *
  * @copyright 2010-2025 Philippe Gaultier
  * @license https://www.blackcube.io/license
  * @link https://www.blackcube.io
  */
-class ItemBehavior extends Behavior
+trait ItemTrait
 {
     /**
      * @var MatrixHelper|null node path in matrix notation
@@ -41,27 +41,11 @@ class ItemBehavior extends Behavior
     private ?MatrixHelper $nodeMatrix = null;
 
     /**
-     * {@inheritdoc}
-     * @throws InvalidConfigException
-     */
-    public function attach($owner)
-    {
-        if (!$owner instanceof ActiveRecord) {
-            throw new InvalidConfigException('ItemBehavior can only be attached to ActiveRecord instances.');
-        }
-        if (!$owner instanceof ItemInterface) {
-            throw new InvalidConfigException('Owner must implement ItemInterface.');
-        }
-        /* @var ActiveRecord&ItemInterface $owner */
-        parent::attach($owner);
-    }
-
-    /**
      * @return bool
      */
     public function getIsRoot(): bool
     {
-        return ($this->owner->level === 1);
+        return ($this->level === 1);
     }
 
     /**
@@ -69,10 +53,9 @@ class ItemBehavior extends Behavior
      */
     public function getChildren(): ActiveQuery
     {
-        $owner = $this->owner;
-        $activeQuery = $owner::find()
-            ->andWhere(['>', 'left', $owner->left])
-            ->andWhere(['<', 'right', $owner->right])
+        $activeQuery = static::find()
+            ->andWhere(['>', 'left', $this->left])
+            ->andWhere(['<', 'right', $this->right])
             ->orderBy(['left' => SORT_ASC]);
         $activeQuery->multiple = true;
         return $activeQuery;
@@ -83,10 +66,9 @@ class ItemBehavior extends Behavior
      */
     public function getTree(): ActiveQuery
     {
-        $owner = $this->owner;
-        $activeQuery = $owner::find()
-            ->andWhere(['>=', 'left', $owner->left])
-            ->andWhere(['<=', 'right', $owner->right])
+        $activeQuery = static::find()
+            ->andWhere(['>=', 'left', $this->left])
+            ->andWhere(['<=', 'right', $this->right])
             ->orderBy(['left' => SORT_ASC]);
         $activeQuery->multiple = true;
         return $activeQuery;
@@ -99,7 +81,7 @@ class ItemBehavior extends Behavior
     {
         $activeQuery = $this
             ->getParents()
-            ->andWhere(['level' => ($this->owner->level - 1)]);
+            ->andWhere(['level' => ($this->level - 1)]);
         $activeQuery->multiple = false;
         return $activeQuery;
     }
@@ -109,10 +91,9 @@ class ItemBehavior extends Behavior
      */
     public function getParents(): ActiveQuery
     {
-        $owner = $this->owner;
-        $activeQuery = $owner::find()
-            ->andWhere(['<', 'left', $owner->left])
-            ->andWhere(['>', 'right', $owner->right])
+        $activeQuery = static::find()
+            ->andWhere(['<', 'left', $this->left])
+            ->andWhere(['>', 'right', $this->right])
             ->orderBy(['left' => SORT_ASC]);
         $activeQuery->multiple = true;
         return $activeQuery;
@@ -125,7 +106,7 @@ class ItemBehavior extends Behavior
     {
         $activeQuery = $this
             ->getSiblingsTrees()
-            ->andWhere(['level' => $this->owner->level]);
+            ->andWhere(['level' => $this->level]);
         return $activeQuery;
     }
 
@@ -134,21 +115,20 @@ class ItemBehavior extends Behavior
      */
     public function getSiblingsTrees(): ActiveQuery
     {
-        $owner = $this->owner;
         if ($this->getIsRoot() === true) {
-            $activeQuery = $owner::find()
-                ->andWhere(['<=', 'right', $owner->left])
-                ->andWhere(['>=', 'left', $owner->right])
+            $activeQuery = static::find()
+                ->andWhere(['<=', 'right', $this->left])
+                ->andWhere(['>=', 'left', $this->right])
                 ->orderBy(['left' => SORT_ASC]);
         } else {
             /** @var ItemInterface $parent */
             $parent = $this->getParent()->one();
-            $activeQuery = $owner::find()
+            $activeQuery = static::find()
                 ->andWhere(['>', 'left', $parent->left])
                 ->andWhere(['<', 'right', $parent->right])
                 ->andWhere(['or',
-                    ['<', 'left', $owner->left],
-                    ['>', 'right', $owner->right]
+                    ['<', 'left', $this->left],
+                    ['>', 'right', $this->right]
                 ])
                 ->orderBy(['left' => SORT_ASC]);
         }
@@ -161,18 +141,17 @@ class ItemBehavior extends Behavior
      */
     public function getPreviousSiblingsTrees(): ActiveQuery
     {
-        $owner = $this->owner;
         if ($this->getIsRoot() === true) {
-            $activeQuery = $owner::find()
-                ->andWhere(['<=', 'right', $owner->left])
+            $activeQuery = static::find()
+                ->andWhere(['<=', 'right', $this->left])
                 ->orderBy(['left' => SORT_ASC]);
         } else {
             /** @var ItemInterface $parent */
             $parent = $this->getParent()->one();
-            $activeQuery = $owner::find()
+            $activeQuery = static::find()
                 ->andWhere(['>', 'left', $parent->left])
                 ->andWhere(['<', 'right', $parent->right])
-                ->andWhere(['<=', 'right', $owner->left])
+                ->andWhere(['<=', 'right', $this->left])
                 ->orderBy(['left' => SORT_ASC]);
         }
         $activeQuery->multiple = true;
@@ -186,7 +165,7 @@ class ItemBehavior extends Behavior
     {
         $activeQuery = $this->getPreviousSiblingsTrees();
         $activeQuery
-            ->andWhere(['level' => $this->owner->level]);
+            ->andWhere(['level' => $this->level]);
         return $activeQuery;
     }
 
@@ -207,18 +186,17 @@ class ItemBehavior extends Behavior
      */
     public function getNextSiblingsTrees(): ActiveQuery
     {
-        $owner = $this->owner;
         if ($this->getIsRoot() === true) {
-            $activeQuery = $owner::find()
-                ->andWhere(['>=', 'left', $owner->right])
+            $activeQuery = static::find()
+                ->andWhere(['>=', 'left', $this->right])
                 ->orderBy(['left' => SORT_ASC]);
         } else {
             /** @var ItemInterface $parent */
             $parent = $this->getParent()->one();
-            $activeQuery = $owner::find()
+            $activeQuery = static::find()
                 ->andWhere(['>', 'left', $parent->left])
                 ->andWhere(['<', 'right', $parent->right])
-                ->andWhere(['>=', 'left', $owner->right])
+                ->andWhere(['>=', 'left', $this->right])
                 ->orderBy(['left' => SORT_ASC]);
         }
         $activeQuery->multiple = true;
@@ -233,7 +211,7 @@ class ItemBehavior extends Behavior
         $activeQuery = $this
             ->getNextSiblingsTrees();
         $activeQuery
-            ->andWhere(['level' => $this->owner->level]);
+            ->andWhere(['level' => $this->level]);
         return $activeQuery;
     }
 
@@ -256,10 +234,10 @@ class ItemBehavior extends Behavior
     public function setNodePath(string $nodePath): void
     {
         $this->nodeMatrix = TreeHelper::convertPathToMatrix($nodePath);
-        $this->owner->path = $nodePath;
-        $this->owner->level = TreeHelper::getLevelFromPath($nodePath);
-        $this->owner->left = TreeHelper::getLeftFromMatrix($this->nodeMatrix);
-        $this->owner->right = TreeHelper::getRightFromMatrix($this->nodeMatrix);
+        $this->path = $nodePath;
+        $this->level = TreeHelper::getLevelFromPath($nodePath);
+        $this->left = TreeHelper::getLeftFromMatrix($this->nodeMatrix);
+        $this->right = TreeHelper::getRightFromMatrix($this->nodeMatrix);
     }
 
     /**
@@ -269,10 +247,10 @@ class ItemBehavior extends Behavior
     public function setNodeMatrix(MatrixHelper $matrix): void
     {
         $this->nodeMatrix = $matrix;
-        $this->owner->path = TreeHelper::convertMatrixToPath($matrix);
-        $this->owner->level = TreeHelper::getLevelFromPath($this->owner->path);
-        $this->owner->left = TreeHelper::getLeftFromMatrix($this->nodeMatrix);
-        $this->owner->right = TreeHelper::getRightFromMatrix($this->nodeMatrix);
+        $this->path = TreeHelper::convertMatrixToPath($matrix);
+        $this->level = TreeHelper::getLevelFromPath($this->path);
+        $this->left = TreeHelper::getLeftFromMatrix($this->nodeMatrix);
+        $this->right = TreeHelper::getRightFromMatrix($this->nodeMatrix);
     }
 
     /**
@@ -280,7 +258,7 @@ class ItemBehavior extends Behavior
      */
     public function getNodeMatrix(): MatrixHelper
     {
-        return TreeHelper::convertPathToMatrix($this->owner->path);
+        return TreeHelper::convertPathToMatrix($this->path);
     }
 
     /**
@@ -289,7 +267,7 @@ class ItemBehavior extends Behavior
      */
     public function canMove(string $targetPath): bool
     {
-        return (strncmp($this->owner->path, $targetPath, strlen($this->owner->path)) !== 0);
+        return (strncmp($this->path, $targetPath, strlen($this->path)) !== 0);
     }
 
     /**
@@ -302,24 +280,23 @@ class ItemBehavior extends Behavior
      */
     public function saveInto(ItemInterface $targetItem, bool $runValidation = true, ?array $attributeNames = null): bool
     {
-        $owner = $this->owner;
         $status = false;
-        
-        if ($owner->getIsNewRecord() === false) {
-            $transaction = $owner::getDb()->beginTransaction();
-            $status = $owner->save($runValidation, $attributeNames);
+
+        if ($this->getIsNewRecord() === false) {
+            $transaction = static::getDb()->beginTransaction();
+            $status = $this->save($runValidation, $attributeNames);
             if ($status === true) {
                 $this->moveInto($targetItem);
             }
-            if ($owner->hasErrors() === true) {
+            if ($this->hasErrors() === true) {
                 $transaction->rollBack();
             } else {
                 $transaction->commit();
             }
-        } elseif ($owner->path !== null) {
-            throw new InvalidNodeConfigurationException(Yii::t('hazeltree/models/node', 'Cannot "saveInto()" a new record with a node path'));
+        } elseif ($this->path !== null) {
+            throw new InvalidNodeConfigurationException('Cannot "saveInto()" a new record with a node path');
         } else {
-            $transaction = $owner::getDb()->beginTransaction();
+            $transaction = static::getDb()->beginTransaction();
             /** @var ItemInterface|null $lastChild */
             $lastChild = $targetItem->getChildren()
                 ->andWhere(['level' => $targetItem->level + 1])
@@ -331,8 +308,8 @@ class ItemBehavior extends Behavior
                 $lastSegment = TreeHelper::getLastSegment($lastChild->getNodeMatrix()) + 1;
             }
             $this->setNodePath($targetItem->path . TreeHelper::PATH_SEPARATOR . $lastSegment);
-            $status = $owner->save($runValidation, $attributeNames);
-            if ($owner->hasErrors() === true) {
+            $status = $this->save($runValidation, $attributeNames);
+            if ($this->hasErrors() === true) {
                 $transaction->rollBack();
             } else {
                 $transaction->commit();
@@ -351,24 +328,23 @@ class ItemBehavior extends Behavior
      */
     public function saveBefore(ItemInterface $targetItem, bool $runValidation = true, ?array $attributeNames = null): bool
     {
-        $owner = $this->owner;
         $status = false;
-        
-        if ($owner->getIsNewRecord() === false) {
-            $transaction = $owner::getDb()->beginTransaction();
-            $status = $owner->save($runValidation, $attributeNames);
+
+        if ($this->getIsNewRecord() === false) {
+            $transaction = static::getDb()->beginTransaction();
+            $status = $this->save($runValidation, $attributeNames);
             if ($status === true) {
                 $this->moveBefore($targetItem);
             }
-            if ($owner->hasErrors() === true) {
+            if ($this->hasErrors() === true) {
                 $transaction->rollBack();
             } else {
                 $transaction->commit();
             }
-        } elseif ($owner->path !== null) {
-            throw new InvalidNodeConfigurationException(Yii::t('hazeltree/models/node', 'Cannot "saveBefore()" a new record with a node path'));
+        } elseif ($this->path !== null) {
+            throw new InvalidNodeConfigurationException('Cannot "saveBefore()" a new record with a node path');
         } else {
-            $transaction = $owner::getDb()->beginTransaction();
+            $transaction = static::getDb()->beginTransaction();
             $path = $targetItem->path;
 
             $nodesMoveMatrix = $this->prepareMoveMatrix($targetItem, $targetItem, 1);
@@ -379,8 +355,8 @@ class ItemBehavior extends Behavior
             $this->moveAndSaveItems($nodesToMove, $nodesMoveMatrix);
 
             $this->setNodePath($path);
-            $status = $owner->save($runValidation, $attributeNames);
-            if ($owner->hasErrors() === true) {
+            $status = $this->save($runValidation, $attributeNames);
+            if ($this->hasErrors() === true) {
                 $transaction->rollBack();
             } else {
                 $transaction->commit();
@@ -399,24 +375,23 @@ class ItemBehavior extends Behavior
      */
     public function saveAfter(ItemInterface $targetItem, bool $runValidation = true, ?array $attributeNames = null): bool
     {
-        $owner = $this->owner;
         $status = false;
-        
-        if ($owner->getIsNewRecord() === false) {
-            $transaction = $owner::getDb()->beginTransaction();
-            $status = $owner->save($runValidation, $attributeNames);
+
+        if ($this->getIsNewRecord() === false) {
+            $transaction = static::getDb()->beginTransaction();
+            $status = $this->save($runValidation, $attributeNames);
             if ($status === true) {
                 $this->moveAfter($targetItem);
             }
-            if ($owner->hasErrors() === true) {
+            if ($this->hasErrors() === true) {
                 $transaction->rollBack();
             } else {
                 $transaction->commit();
             }
-        } elseif ($owner->path !== null) {
-            throw new InvalidNodeConfigurationException(Yii::t('hazeltree/models/node', 'Cannot "saveAfter()" a new record with a node path'));
+        } elseif ($this->path !== null) {
+            throw new InvalidNodeConfigurationException('Cannot "saveAfter()" a new record with a node path');
         } else {
-            $transaction = $owner::getDb()->beginTransaction();
+            $transaction = static::getDb()->beginTransaction();
             /** @var ItemInterface|null $nextSiblingItem */
             $nextSiblingItem = $targetItem->getNextSibling()->one();
             if ($nextSiblingItem !== null) {
@@ -436,8 +411,8 @@ class ItemBehavior extends Behavior
             }
 
             $this->setNodePath($path);
-            $status = $owner->save($runValidation, $attributeNames);
-            if ($owner->hasErrors() === true) {
+            $status = $this->save($runValidation, $attributeNames);
+            if ($this->hasErrors() === true) {
                 $transaction->rollBack();
             } else {
                 $transaction->commit();
@@ -453,8 +428,6 @@ class ItemBehavior extends Behavior
      */
     public function moveInto(ItemInterface $targetItem): void
     {
-        $owner = $this->owner;
-        
         if ($this->canMove($targetItem->path) === true) {
             $currentLastSegment = TreeHelper::getLastSegment($this->getNodeMatrix());
             /** @var ItemInterface|null $targetChild */
@@ -465,30 +438,32 @@ class ItemBehavior extends Behavior
             if ($targetChild !== null) {
                 $lastSegment = TreeHelper::getLastSegment($targetChild->getNodeMatrix());
                 $bump = ($lastSegment + 1) - $currentLastSegment;
-                $nodesMoveMatrix = $this->prepareMoveMatrix($owner, $targetChild, $bump);
+                $nodesMoveMatrix = $this->prepareMoveMatrix($this, $targetChild, $bump);
             } else {
                 $bump = 1 - $currentLastSegment;
-                $nodesMoveMatrix = $this->prepareMoveMatrix($owner, $targetItem, $bump, true);
+                $nodesMoveMatrix = $this->prepareMoveMatrix($this, $targetItem, $bump, true);
             }
 
             /** @var ItemInterface|null $nextSibling */
             $nextSibling = $this->getNextSibling()->one();
             $nextSiblingPk = ($nextSibling !== null) ? $nextSibling->getPrimaryKey() : null;
 
-            $transaction = $owner::getDb()->beginTransaction();
+            $transaction = static::getDb()->beginTransaction();
 
             $nodesToMove = $this->getTree();
 
             $this->moveAndSaveItems($nodesToMove, $nodesMoveMatrix);
 
-            if ($nextSiblingPk !== null) {
+            // Only move back siblings if the next sibling is not the target itself
+            // (when moving INTO the next sibling, it becomes the parent, not a gap to fill)
+            if ($nextSiblingPk !== null && $nextSiblingPk !== $targetItem->getPrimaryKey()) {
                 $targetItem->refresh();
-                $owner->refresh();
+                $this->refresh();
                 $this->moveBackItems($nextSiblingPk);
             }
 
             $transaction->commit();
-            $owner->refresh();
+            $this->refresh();
         }
     }
 
@@ -499,14 +474,12 @@ class ItemBehavior extends Behavior
      */
     public function moveBefore(ItemInterface $targetItem): void
     {
-        $owner = $this->owner;
-        
         if ($this->canMove($targetItem->path) === true) {
             /** @var ItemInterface|null $nextSibling */
             $nextSibling = $this->getNextSibling()->one();
             $nextSiblingPk = ($nextSibling !== null) ? $nextSibling->getPrimaryKey() : null;
 
-            $transaction = $owner::getDb()->beginTransaction();
+            $transaction = static::getDb()->beginTransaction();
 
             $nodesMoveMatrix = $this->prepareMoveMatrix($targetItem, $targetItem, 1);
 
@@ -515,17 +488,17 @@ class ItemBehavior extends Behavior
             $this->moveAndSaveItems($nodesToMove, $nodesMoveMatrix);
 
             $targetItem->refresh();
-            $owner->refresh();
+            $this->refresh();
 
             $this->moveThisItemTree($targetItem, true);
 
             $targetItem->refresh();
-            $owner->refresh();
+            $this->refresh();
             $this->moveBackItems($nextSiblingPk);
 
             $transaction->commit();
             $targetItem->refresh();
-            $owner->refresh();
+            $this->refresh();
         }
     }
 
@@ -536,27 +509,25 @@ class ItemBehavior extends Behavior
      */
     public function moveAfter(ItemInterface $targetItem): void
     {
-        $owner = $this->owner;
-        
         if ($this->canMove($targetItem->path) === true) {
             /** @var ItemInterface|null $targetItemNextSibling */
             $targetItemNextSibling = $targetItem->getNextSibling()->one();
             if ($targetItemNextSibling !== null) {
                 $this->moveBefore($targetItemNextSibling);
             } else {
-                $transaction = $owner::getDb()->beginTransaction();
+                $transaction = static::getDb()->beginTransaction();
                 /** @var ItemInterface|null $nextSibling */
                 $nextSibling = $this->getNextSibling()->one();
                 $nextSiblingPk = ($nextSibling !== null) ? $nextSibling->getPrimaryKey() : null;
 
                 $this->moveThisItemTree($targetItem, false);
 
-                $owner->refresh();
+                $this->refresh();
                 $this->moveBackItems($nextSiblingPk);
 
                 $transaction->commit();
                 $targetItem->refresh();
-                $owner->refresh();
+                $this->refresh();
             }
         }
     }
@@ -568,8 +539,6 @@ class ItemBehavior extends Behavior
      */
     private function moveThisItemTree(ItemInterface $targetItem, bool $moveBefore): void
     {
-        $owner = $this->owner;
-        
         $itemLastSegment = TreeHelper::getLastSegment($this->getNodeMatrix());
         $targetLastSegment = TreeHelper::getLastSegment($targetItem->getNodeMatrix());
         if ($moveBefore === true) {
@@ -578,7 +547,7 @@ class ItemBehavior extends Behavior
             $itemBump = $targetLastSegment - $itemLastSegment + 1;
         }
 
-        $nodesMoveMatrix = $this->prepareMoveMatrix($owner, $targetItem, $itemBump);
+        $nodesMoveMatrix = $this->prepareMoveMatrix($this, $targetItem, $itemBump);
 
         $nodesToMove = $this->getTree();
 
@@ -592,10 +561,9 @@ class ItemBehavior extends Behavior
     private function moveBackItems(mixed $itemPk = null): void
     {
         if ($itemPk !== null) {
-            $owner = $this->owner;
             /** @var ItemInterface|null $nextSibling */
-            $nextSibling = $owner::findOne($itemPk);
-            
+            $nextSibling = static::findOne($itemPk);
+
             if ($nextSibling !== null) {
                 $nodesMoveMatrix = $this->prepareMoveMatrix($nextSibling, $nextSibling, -1);
 
@@ -612,13 +580,13 @@ class ItemBehavior extends Behavior
      */
     private function getItemAndSiblings(ItemInterface $item): ActiveQuery
     {
-        $owner = $this->owner;
-        $pk = $owner::primaryKey();
-        $treeQuery = $item->getTree()->select($pk);
-        $siblingsTreeQuery = $item->getNextSiblingsTrees()->select($pk);
-        return $owner::find()
-            ->where(['in', $pk, $treeQuery])
-            ->orWhere(['in', $pk, $siblingsTreeQuery]);
+        $pk = static::primaryKey();
+        // Fetch IDs first to avoid SQLite subquery limitation
+        $treeIds = $item->getTree()->select($pk)->column();
+        $siblingsTreeIds = $item->getNextSiblingsTrees()->select($pk)->column();
+        $allIds = array_merge($treeIds, $siblingsTreeIds);
+        return static::find()
+            ->where(['in', $pk, $allIds]);
     }
 
     /**
@@ -661,7 +629,7 @@ class ItemBehavior extends Behavior
      * These should be merged with the model's own rules
      * @return array
      */
-    public static function rules(): array
+    public static function treeRules(): array
     {
         return [
             [['left', 'right'], 'number'],

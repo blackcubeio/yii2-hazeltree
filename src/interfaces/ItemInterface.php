@@ -178,7 +178,7 @@ interface ItemInterface
      * Refresh the model from the database
      * @return bool
      */
-    public function refresh(): bool;
+    public function refresh();
 
     /**
      * Save the model to the database
@@ -186,12 +186,12 @@ interface ItemInterface
      * @param array|null $attributeNames
      * @return bool
      */
-    public function save(bool $runValidation = true, ?array $attributeNames = null): bool;
+    public function save($runValidation = true, $attributeNames = null);
 
     /**
      * Returns the primary key value
      * @param bool $asArray
      * @return mixed
      */
-    public function getPrimaryKey(bool $asArray = false): mixed;
+    public function getPrimaryKey($asArray = false);
 }

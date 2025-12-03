@@ -6,3 +6,4 @@ modules:
     config:
         Yii2:
             configFile: 'tests/config/main.php'
+            transaction: false

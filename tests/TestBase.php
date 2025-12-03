@@ -73,7 +73,7 @@ class TestBase
             $db->createCommand()->dropTable($tableName)->execute();
         }
 
-        // Create table
+        // Create table with InnoDB engine for transaction support
         $db->createCommand()->createTable($tableName, [
             'id' => 'INT PRIMARY KEY AUTO_INCREMENT',
             'name' => 'VARCHAR(255)',
@@ -81,7 +81,7 @@ class TestBase
             'left' => 'DOUBLE NOT NULL',
             'right' => 'DOUBLE NOT NULL',
             'level' => 'INT NOT NULL',
-        ])->execute();
+        ], 'ENGINE=InnoDB')->execute();
 
         $db->createCommand()->createIndex('idx-items-left', $tableName, 'left')->execute();
         $db->createCommand()->createIndex('idx-items-right', $tableName, 'right')->execute();
